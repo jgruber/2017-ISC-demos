@@ -1,0 +1,17 @@
+---
+parameters:
+  app_image: webserver
+  app_flavor: m1.medium
+  app_port: 80
+  app_network: cf4bbb2b-f6fb-498e-8820-8adce1e5351f
+  app_subnet: bdeb2f01-83c6-4a72-8df6-26f83b8e68af
+  external_network: 646a4c88-c0a0-4ce8-876b-b0192173ac70
+  lb_subnet: fa97e9e8-d9bd-4cad-9a65-9ca628255f4b
+  lb_port: 80
+  lb_type: TCP
+  lb_method: LEAST_CONNECTIONS
+  lb_monitor: PING
+  lb_pool_member_count: 3
+
+resource_registry:
+  LBaaS::AppServerInstance: app_server.yaml

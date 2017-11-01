@@ -1,0 +1,144 @@
+---
+heat_template_version: 2016-04-08
+
+description: app server deployment.
+
+parameters:
+  app_image:
+    type: string
+    label: App Nova Image
+    description: The image to be used for the applicatoin.
+    constraints:
+      - custom_constraint: glance.image
+  app_flavor:
+    type: string
+    label: App Nova Flavor
+    description: Type of instance (flavor) to be used for the application.
+    default: m1.small
+    constraints:
+      - custom_constraint: nova.flavor
+  use_config_drive:
+    type: boolean
+    label: Use Config Drive
+    description: Use config drive to provider meta and user data.
+    default: true
+  app_network:
+    type: string
+    label: App Network
+    description: Network to listen for requests
+    default: None
+    constraints:
+      - custom_constraint: neutron.network
+  app_subnet:
+    type: string
+    label: App Network
+    description: Subnet to listen for requests
+    default: None
+    constraints:
+      - custom_constraint: neutron.subnet
+  app_listening_ports:
+    type: comma_delimited_list
+    label: Application TCP Listening Ports
+    description: A list of TCP port to allow for the server.
+    default: "22,80,443"
+  app_security_group_name:
+    type: string
+    label: App Security Group Name
+    description: Name given to the security group for this application.
+    default: application_security_group
+  app_server_index:
+    type: number
+    label: App server index
+    description: The index of the server in a group of app servers.
+    default: 1
+  pool_id:
+    type: string
+    label: LBaaS Pool ID for application
+    description: The LBaaS Pool ID to add this application instance.
+  lbaas_port:
+    type: number
+    label: TCP port number to load balance
+    description: The application listener port to send load balanced requests.
+
+resources:
+  name_nonce:
+    type: OS::Heat::RandomString
+    properties:
+      length: 8
+      sequence: lowercase
+
+  app_tcp_security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: security group rules for TCP listeners on the application server
+      name:
+        list_join:
+          - '-'
+          - [{get_param: app_security_group_name},'tcp',{get_resource: name_nonce}]
+      rules:
+        repeat:
+          for_each:
+            <%port%>: {get_param: app_listening_ports}
+          template:
+            protocol: tcp
+            port_range_min: <%port%>
+            port_range_max: <%port%>
+
+  app_icmp_security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: security group rules for ICMP to the application server
+      name:
+        list_join:
+          - '-'
+          - [{get_param: app_security_group_name},'icmp',{get_resource: name_nonce}]
+      rules:
+        - remote_ip_prefix: 0.0.0.0/0
+          protocol: icmp
+
+  app_port:
+    type: OS::Neutron::Port
+    depends_on:
+      - app_tcp_security_group
+      - app_icmp_security_group
+    properties:
+      network: {get_param: app_network}
+      fixed_ips:
+        - subnet: {get_param: app_subnet}
+      security_groups:
+        - {get_resource: app_tcp_security_group}
+        - {get_resource: app_icmp_security_group}
+
+  app_server:
+    type: OS::Nova::Server
+    properties:
+      image: {get_param: app_image}
+      flavor: {get_param: app_flavor}
+      config_drive: {get_param: use_config_drive}
+      networks:
+        - port: {get_resource: app_port}
+
+  pool_member:
+    type: OS::Neutron::LBaaS::PoolMember
+    properties:
+        pool: {get_param: pool_id}
+        address: {get_attr: [app_port, fixed_ips, 0, ip_address]}
+        protocol_port: {get_param: lbaas_port}
+        subnet: {get_param: app_subnet}
+
+outputs:
+  app_instance_name:
+    description: Name of the application instance
+    value: {get_attr: [app_server, name]}
+  app_instance_id:
+    description: ID of the instance
+    value: {get_resource: app_server}
+  app_instance_ip:
+    description: Application instance IP address
+    value: {get_attr: [app_port, fixed_ips, 0, ip_address]}
+  app_instance_mac:
+    description: Application instance MAC address
+    value: {get_attr: [app_port, mac_address]}
+  app_instance_group_index:
+    description: Application instance group index
+    value: {get_param: [app_server_index]}

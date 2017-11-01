@@ -1,0 +1,132 @@
+---
+heat_template_version: 2016-04-08
+
+description: A Group of Load Balanced Servers
+
+parameters:
+  app_image:
+    type: string
+    label: Application Machine Image
+    description: Glance Image for the application server
+    default: None
+  app_flavor:
+    type: string
+    label: Application Instance Flavor
+    description: Nova Flavor for the application server
+    default: m1.medium
+  app_port:
+    type: number
+    label: Application Listening Port
+    description: Port used by the application servers
+    default: 80
+  app_network:
+    type: string
+    label: Application Network
+    description: Network to use for application servers
+    default: None
+    constraints:
+      - custom_constraint: neutron.network
+  app_subnet:
+    type: string
+    label: Applicaiton Subnet
+    description: Subnet to use for application servers
+    default: None
+    constraints:
+      - custom_constraint: neutron.subnet
+  external_network:
+    type: string
+    label: Public Network
+    description: Expose the LBaaS loadbalancer on this network
+    default: None
+    constraints:
+      - custom_constraint: neutron.network
+  lb_subnet:
+    type: string
+    label: LBaaS Loadbalancer Subnet
+    description: Subnet for the LBaaS loadbalancer
+    default: None
+    constraints:
+      - custom_constraint: neutron.subnet
+  lb_port:
+    type: number
+    label: LBaaS Listener Port
+    description: Port used by the LBaaS listener
+    default: 443
+  lb_type:
+    type: string
+    label: LBaaS Protocol Type
+    description: "LBaaS type: TCP, HTTP"
+    default: TCP
+  lb_method:
+    type: string
+    label: LBaaS Pool LB Method
+    description: "LBaaS LB method: LEAST_CONNECTIONS, ROUND_ROBIN, SOURCE_IP"
+    default: LEAST_CONNECTIONS
+  lb_monitor:
+    type: string
+    label: LBaaS Health Monitor
+    description: "LBAaS Health Monitor type: PING, TCP, HTTP"
+    default: PING
+  lb_pool_member_count:
+    type: number
+    label: Application Instances
+    description: Number of application instances to load balance
+    default: 2
+
+resources:
+  servers:
+    type: OS::Heat::ResourceGroup
+    properties:
+      count: {get_param: lb_pool_member_count}
+      resource_def:
+        type: LBaaS::AppServerInstance
+        properties:
+          app_image: {get_param: app_image}
+          app_flavor: {get_param: app_flavor}
+          use_config_drive: true
+          app_network: {get_param: app_network}
+          app_subnet: {get_param: app_subnet}
+          app_server_index: "%index%"
+          pool_id: {get_resource: pool}
+          lbaas_port: {get_param: app_port}
+  monitor:
+    type: OS::Neutron::LBaaS::HealthMonitor
+    properties:
+      delay: 3
+      type: {get_param: lb_monitor}
+      timeout: 3
+      max_retries: 3
+      pool: {get_resource: pool}
+  pool:
+    type: OS::Neutron::LBaaS::Pool
+    properties:
+      lb_algorithm: {get_param: lb_method}
+      protocol: {get_param: lb_type}
+      listener: {get_resource: listener}
+  listener:
+    type: OS::Neutron::LBaaS::Listener
+    properties:
+      loadbalancer: {get_resource: loadbalancer}
+      protocol: {get_param: lb_type}
+      protocol_port: {get_param: lb_port}
+  loadbalancer:
+    type: OS::Neutron::LBaaS::LoadBalancer
+    properties:
+      vip_subnet: {get_param: lb_subnet}
+  floatingip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: {get_param: external_network}
+      port_id: {get_attr: [loadbalancer, vip_port_id]}
+
+outputs:
+  lburl:
+    value:
+      str_replace:
+        template: http://IP_ADDRESS:PORT
+        params:
+          IP_ADDRESS: {get_attr: [floatingip, floating_ip_address]}
+          PORT: {get_param: lb_port}
+    description: >
+      This URL is the "external" URL that can be used to access the
+      load balancer.
