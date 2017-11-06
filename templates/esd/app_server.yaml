@@ -36,16 +36,10 @@ parameters:
     default: None
     constraints:
       - custom_constraint: neutron.subnet
-  app_listening_ports:
+  app_security_groups:
     type: comma_delimited_list
-    label: Application TCP Listening Ports
-    description: A list of TCP port to allow for the server.
-    default: "22,80,443"
-  app_security_group_name:
-    type: string
-    label: App Security Group Name
-    description: Name given to the security group for this application.
-    default: application_security_group
+    label: App Security Groups
+    default: "default"
   app_server_index:
     type: number
     label: App server index
@@ -61,54 +55,18 @@ parameters:
     description: The application listener port to send load balanced requests.
 
 resources:
-  name_nonce:
-    type: OS::Heat::RandomString
-    properties:
-      length: 8
-      sequence: lowercase
-
-  app_tcp_security_group:
-    type: OS::Neutron::SecurityGroup
-    properties:
-      description: security group rules for TCP listeners on the application server
-      name:
-        list_join:
-          - '-'
-          - [{get_param: app_security_group_name},'tcp',{get_resource: name_nonce}]
-      rules:
-        repeat:
-          for_each:
-            <%port%>: {get_param: app_listening_ports}
-          template:
-            protocol: tcp
-            port_range_min: <%port%>
-            port_range_max: <%port%>
-
-  app_icmp_security_group:
-    type: OS::Neutron::SecurityGroup
-    properties:
-      description: security group rules for ICMP to the application server
-      name:
-        list_join:
-          - '-'
-          - [{get_param: app_security_group_name},'icmp',{get_resource: name_nonce}]
-      rules:
-        - remote_ip_prefix: 0.0.0.0/0
-          protocol: icmp
-
   app_port:
     type: OS::Neutron::Port
-    depends_on:
-      - app_tcp_security_group
-      - app_icmp_security_group
     properties:
       network: {get_param: app_network}
       fixed_ips:
         - subnet: {get_param: app_subnet}
       security_groups:
-        - {get_resource: app_tcp_security_group}
-        - {get_resource: app_icmp_security_group}
-
+        repeat:
+          for_each:
+            <%sg_name%>: { get_param: app_security_groups }
+          template:
+            <%sg_name%>
   app_server:
     type: OS::Nova::Server
     properties:
@@ -117,7 +75,6 @@ resources:
       config_drive: {get_param: use_config_drive}
       networks:
         - port: {get_resource: app_port}
-
   pool_member:
     type: OS::Neutron::LBaaS::PoolMember
     properties:

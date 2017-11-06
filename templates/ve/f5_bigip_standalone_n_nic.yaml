@@ -1,0 +1,365 @@
+---
+heat_template_version: 2016-04-08
+
+description: Launch a 3 NIC BIG-IP using N-NIC templates
+
+parameters:
+
+  bigip_image:
+    type: string
+    label: f5 BIG-IP VE Image
+    description: The BIG-IP VE image to be used on the compute instance.
+    constraints:
+      - custom_constraint: glance.image
+  bigip_flavor:
+    type: string
+    label: f5 BIG-IP VE Flavor
+    description: Type of instance (flavor) to be used for the VE.
+    default: m1.medium
+    constraints:
+      - custom_constraint: nova.flavor
+  bigip_servers_ntp:
+    type: comma_delimited_list
+    label: f5 BIG-IP VE NTP servers
+    description: A list of NTP servers to configure on the BIG-IP.
+    default:
+      - 0.us.pool.ntp.org
+      - 1.us.pool.ntp.org
+  bigip_servers_dns:
+    type: comma_delimited_list
+    label: f5 BIG-IP VE Domain Name Servers
+    description: A list of DNS servers to configure on the BIG-IP.
+    default:
+      -
+  bigip_admin_pwd:
+    type: string
+    label: f5 BIG-IP VE Admin User Password
+    description: Password for the BIG-IP admin user.
+    hidden: true
+  bigip_root_pwd:
+    type: string
+    label: f5 BIG-IP VE Root User Password
+    description: Password for the BIG-IP root user.
+    hidden: true
+  bigip_license_key:
+    type: string
+    label: Primary BIG-IP VE License Base Key
+    description: f5 BIG-IP License Base Key.
+
+  management_network_cidr:
+    type: string
+    label: IPv4 CIDR for Management Network
+    description: f5 Management Subnet CIDR
+    default: 192.168.245.0/24
+  managemenr_network_selfip:
+    type: string
+    label: IPv4 Address for Management
+    description: f5 IPv4 Management Address
+    default: 192.168.245.10
+  management_network_gateway_ip:
+    type: string
+    label: IPv4 Gateway IP for the Managment Network
+    default: 192.168.245.1
+  management_ip_allocation_start:
+    type: string
+    label: IPv4 Address to Management Network Start Allocations
+    description: Management network IPv4 allocation range start
+    default: 192.168.245.20
+  management_ip_allocation_stop:
+    type: string
+    label: IPv4 Address to Stop Management Network Allocations
+    description: Management network IPv4 allocation range stop
+    default: 192.168.245.100
+  ha_network_cidr:
+    type: string
+    label: IPv4 CIDR for HA Clustering Network
+    description: f5 HA Clustering Subnet CIDR
+    default: 192.168.250.0/24
+  ha_network_selfip:
+    type: string
+    label: IPv4 Address for HA Clustering
+    description: f5 HA IPv4 Clustering Address
+    default: 192.168.250.10
+  ha_network_gateway_ip:
+    type: string
+    label: IPv4 Gateway IP for the HA Clustering Network
+    default: 192.168.250.1
+  ha_ip_allocation_start:
+    type: string
+    label: IPv4 Address to HA Network Start Allocations
+    description: HA network IPv4 allocation range start
+    default: 192.168.250.20
+  ha_ip_allocation_stop:
+    type: string
+    label: IPv4 Address to Stop HA Network Allocations
+    description: HA network IPv4 allocation range stop
+    default: 192.168.250.100
+  internal_network_cidr:
+    type: string
+    label: IPv4 Internal Network
+    description: f5 Internal Subnet CIDR
+    default: 192.168.251.0/24
+  internal_network_selfip:
+    type: string
+    label: IPv4 Address for Internal Network
+    description: f5 HA IPv4 Internal Address
+    default: 192.168.251.10
+  internal_network_gateway_ip:
+    type: string
+    label: IPv4 Gateway IP for the Internal Network
+    default: 192.168.251.1
+  internal_ip_allocation_start:
+    type: string
+    label: IPv4 Address to Internal Network Start Allocations
+    description: Internal network IPv4 allocation range start
+    default: 192.168.251.20
+  internal_ip_allocation_stop:
+    type: string
+    label: IPv4 Address to Stop Internal Network Allocations
+    description: Internal network IPv4 allocation range stop
+    default: 192.168.251.100
+  external_network_cidr:
+    type: string
+    label: IPv4 External Network
+    description: f5 External Subnet CIDR
+    default: 192.168.252.0/24
+  external_network_selfip:
+    type: string
+    label: IPv4 Address for External Network
+    description: f5 HA IPv4 External Address
+    default: 192.168.252.10
+  external_network_gateway_ip:
+    type: string
+    label: IPv4 Gateway IP for the External Network
+    default: 192.168.252.1
+  external_ip_allocation_start:
+    type: string
+    label: IPv4 Address to External Network Start Allocations
+    description: External network IPv4 allocation range start
+    default: 192.168.252.20
+  external_ip_allocation_stop:
+    type: string
+    label: IPv4 Address to Stop External Network Allocations
+    description: External network IPv4 allocation range stop
+    default: 192.168.252.100
+  os_external_network:
+    type: string
+    label: OpenStack external network
+    default: public
+
+resources:
+
+  name_nonce:
+    type: OS::Heat::RandomString
+    properties:
+      length: 8
+      sequence: lowercase
+
+  bigip_ssk_key:
+    type: OS::Nova::KeyPair
+    properties:
+      name:
+        list_join:
+          - "-"
+          - ['bigip-ssh-key-', {get_resource: name_nonce}]
+
+  management_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        list_join:
+          - "-"
+          - ['management-network-',{get_resource: name_nonce}]
+  management_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      name:
+        list_join:
+          - '-'
+          - ['management-subnet-',{get_resource: name_nonce}]
+      network_id: {get_resource: management_network}
+      cidr: {get_param: management_network_cidr}
+      gateway_ip: {get_param: management_network_gateway_ip}
+      allocation_pools:
+        - start: {get_param: management_ip_allocation_start}
+          end: {get_param: management_ip_allocation_stop}
+      dns_nameservers: {get_param: bigip_servers_dns}
+
+  ha_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        list_join:
+          - '-'
+          - ['ha-network-',{get_resource: name_nonce}]
+  ha_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      name:
+        list_join:
+          - '-'
+          - ['ha-subnet-',{get_resource: name_nonce}]
+      network_id: {get_resource: ha_network}
+      cidr: {get_param: ha_network_cidr}
+      gateway_ip: {get_param: ha_network_gateway_ip}
+      allocation_pools:
+        - start: {get_param: ha_ip_allocation_start}
+          end: {get_param: ha_ip_allocation_stop}
+      dns_nameservers: {get_param: bigip_servers_dns}
+
+  internal_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        list_join:
+          - '-'
+          - ['internal-network-',{get_resource: name_nonce}]
+  internal_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      name:
+        list_join:
+          - '-'
+          - ['internal-subnet-',{get_resource: name_nonce}]
+      network_id: {get_resource: internal_network}
+      cidr: {get_param: internal_network_cidr}
+      gateway_ip: {get_param: internal_network_gateway_ip}
+      allocation_pools:
+        - start: {get_param: internal_ip_allocation_start}
+          end: {get_param: internal_ip_allocation_stop}
+      dns_nameservers: {get_param: bigip_servers_dns}
+
+  external_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        list_join:
+          - '-'
+          - ['external-network-',{get_resource: name_nonce}]
+  external_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      name:
+        list_join:
+          - '-'
+          - ['external-subnet-',{get_resource: name_nonce}]
+      network_id: {get_resource: external_network}
+      cidr: {get_param: external_network_cidr}
+      gateway_ip: {get_param: external_network_gateway_ip}
+      allocation_pools:
+        - start: {get_param: external_ip_allocation_start}
+          end: {get_param: external_ip_allocation_stop}
+      dns_nameservers: {get_param: bigip_servers_dns}
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      external_gateway_info:
+        network: {get_param: os_external_network}
+
+  router_management_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: {get_resource: router}
+      subnet_id: {get_resource: management_subnet }
+
+  router_ha_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: {get_resource: router}
+      subnet_id: {get_resource: ha_subnet }
+
+  router_internal_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: {get_resource: router}
+      subnet_id: {get_resource: internal_subnet }
+
+  router_external_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: {get_resource: router}
+      subnet_id: {get_resource: external_subnet }
+
+  bigip:
+    type: F5::BigIP::NNICInstance
+    properties:
+      bigip_image: {get_param: bigip_image}
+      bigip_flavor: {get_param: bigip_flavor}
+      use_config_drive: true
+      bigip_servers_ntp: {get_param: bigip_servers_ntp}
+      bigip_servers_dns: {get_param: bigip_servers_dns}
+      bigip_admin_pwd: {get_param: bigip_admin_pwd}
+      bigip_root_pwd: {get_param: bigip_root_pwd}
+      bigip_license_key: {get_param: bigip_license_key}
+      bigip_os_ssh_key:
+        list_join:
+          - "-"
+          - ['bigip-ssh-key-', {get_resource: name_nonce}]
+      bigip_modules:
+        - ltm:nominal
+      external_network: {get_param: os_external_network}
+      mgmt_network: {get_resource: management_network}
+      mgmt_security_group_name: mgmt-secgroup-nnic
+      bigip_nic_count: 3
+      bigip_last_nic_index: 2
+      network_vlan_names:
+        - {get_resource: ha_network}
+        - {get_resource: internal_network}
+        - {get_resource: external_network}
+      network_vlan_subnets:
+        - {get_resource: ha_subnet}
+        - {get_resource: internal_subnet}
+        - {get_resource: external_subnet}
+      network_vlan_security_group_rules:
+        security_group_rules:
+          # ha
+          - rules:
+            - protocol: icmp
+              remote_ip_prefix: 0.0.0.0/0
+            - protocol: tcp
+              remote_ip_prefix: 0.0.0.0/0
+            - protocol: udp
+              remote_ip_prefix: 0.0.0.0/0
+          # internal
+          - rules:
+            - protocol: icmp
+              remote_ip_prefix: 0.0.0.0/0
+            - protocol: tcp
+              remote_ip_prefix: 0.0.0.0/0
+            - protocol: udp
+              remote_ip_prefix: 0.0.0.0/0
+          # external
+          - rules:
+            - protocol: tcp
+              remote_ip_prefix: 0.0.0.0/0
+              port_range_min: 22
+              port_range_max: 22
+            - protocol: tcp
+              remote_ip_prefix: 0.0.0.0/0
+              port_range_min: 80
+              port_range_max: 80
+            - protocol: tcp
+              remote_ip_prefix: 0.0.0.0/0
+              port_range_min: 443
+              port_range_max: 443
+      bigip_self_ip_addresses:
+        - {get_param: ha_network_selfip}
+        - {get_param: internal_network_selfip}
+        - {get_param: external_network_selfip}
+      bigip_self_cidr_blocks:
+        - {get_param: ha_network_cidr}
+        - {get_param: internal_network_cidr}
+        - {get_param: external_network_cidr}
+      bigip_vlan_mtus:
+        - '1400'
+        - '1400'
+        - '1400'
+      bigip_vlan_names:
+        - HA
+        - internal
+        - external
+      bigip_self_port_lockdowns:
+        - allow-default
+        - allow-default
+        - tcp:22;tcp:443

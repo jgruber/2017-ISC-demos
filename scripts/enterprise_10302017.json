@@ -1,0 +1,40 @@
+{
+
+  "webdebug": {
+    "lbaas_irule": ["insert_debug_script"]
+  },
+
+  "internal": {
+    "lbaas_ctcp": "tcp-lan-optimized",
+    "lbaas_stcp": "tcp-lan-optimized",
+    "lbaas_irule": ["internal_access_only"]
+  },
+
+  "domestic_download": {
+    "lbaas_ctcp": "tcp-lan-short-timeout",
+    "lbaas_stcp": "tcp-lan-optimized",
+    "lbaas_policy": ["export_controlled_dmz"]
+  },
+
+  "dmzmobile": {
+    "lbaas_ctcp": "tcp-mobile-optimized",
+    "lbaas_stcp": "tcp-lan-optimized",
+    "lbaas_cssl_profile": "clientssl-secure",
+    "lbaas_irule": ["server_header_scrub","cve-2017-5638","cve-2015-1635","cve-2013-0156"],
+    "lbaas_policy": ["dmz"],
+    "lbaas_persist": "cookie",
+    "lbaas_fallback_persist": "source_addr"
+  },
+
+  "dmz": {
+    "lbaas_ctcp": "tcp-lan-optimized",
+    "lbaas_stcp": "tcp-lan-optimized",
+    "lbaas_cssl_profile": "clientssl-insecure-compatible",
+    "lbaas_sssl_profile": "serverssl",
+    "lbaas_irule": ["server_header_scrub","cve-2017-5638","cve-2015-1635","cve-2013-0156"],
+    "lbaas_policy": ["dmz"],
+    "lbaas_persist": "cookie",
+    "lbaas_fallback_persist": "source_addr"
+  }
+
+}

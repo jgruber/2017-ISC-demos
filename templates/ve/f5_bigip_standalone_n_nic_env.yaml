@@ -1,0 +1,23 @@
+---
+parameters:
+  bigip_image: BIGIP-13.0.0.2.0.1671.LTM
+  bigip_flavor: m1.bigiq.medium
+  bigip_servers_dns:
+    - 10.192.50.10
+    - 10.192.50.11
+  bigip_admin_pwd: openstack
+  bigip_root_pwd: openstack
+  bigip_license_key: XCUTH-GNPGK-LLYNN-BLHJK-YVICVPF
+  os_external_network: public
+
+resource_registry:
+  F5::BigIP::NNICInstance: ../f5-openstack-hot/experimental/templates/standalone/nnic/f5_bigip_standalone_n_nic.yaml
+  F5::BigIP::OverrideDefaultConfig: ../f5-openstack-hot/experimental/configs/override_default_config.yaml
+  F5::BigIP::OnboardingLibs: ../f5-openstack-hot/experimental/configs/onboarding_libs.yaml
+  F5::BigIP::OnboardingScripts: ../f5-openstack-hot/experimental/configs/onboarding_scripts.yaml
+  F5::BigIP::OnboardNetworkConfigIndexed: ../f5-openstack-hot/experimental/configs/onboarding_network_config_indexed.yaml
+  F5::BigIP::ManagementSecurityGroup: ../f5-openstack-hot/experimental/security_groups/bigip_mgmt_security_group.yaml
+  F5::BigIP::CustomSecurityGroup: ../f5-openstack-hot/experimental/security_groups/bigip_custom_security_group.yaml
+  F5::BigIP::NeutronPort: ../f5-openstack-hot/experimental/networks/bigip_neutron_port.yaml
+  F5::BigIP::NNicHandler: ../f5-openstack-hot/experimental/networks/bigip_nnic_handler.yaml
+  F5::BigIP::RunOnboardNetworkConfigs: ../f5-openstack-hot/experimental/configs/run_onboard_network_configs.yaml

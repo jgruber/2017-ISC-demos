@@ -1,0 +1,14 @@
+---
+parameters:
+  app_image: webserver
+  app_flavor: m1.medium
+  app_port: 80
+  lb_port: 443
+  lb_type: HTTP
+  lb_method: LEAST_CONNECTIONS
+  lb_monitor: PING
+  lb_pool_member_count: 3
+  external_network: 8b000a01-a864-4a12-9e98-bf89002f82c9
+
+resource_registry:
+  LBaaS::AppServerInstance: app_server.yaml
